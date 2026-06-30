@@ -1,4 +1,4 @@
-const CACHE_NAME = 'alergo-cache-v2';
+const CACHE_NAME = 'alergo-cache-v3';
 const assets = [
   './',
   './index.html',
