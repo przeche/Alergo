@@ -1,4 +1,4 @@
-// ===== AlergoPrognoza — logika aplikacji =====
+// ===== Alergo — logika aplikacji =====
 
 const STORAGE_KEY = "alergo-settings";
 
@@ -7,24 +7,151 @@ function defaultSettings() {
         location: null,            // { name, lat, lon }
         selectedAllergens: ["birch_pollen", "grass_pollen", "ragweed_pollen", "dust_mites"],
         panelOpen: false,
-        viewMode: "selected"       // "selected" | "all"
+        viewMode: "selected",      // "selected" | "all"
+        language: "pl"             // pl | en | de | es | fr | it
     };
 }
 
 let settings = defaultSettings();
-let dailyForecast = []; // [{ date, label, levels: { key: value } }]
+let dailyForecast = []; // [{ date, dayIndex, dateDisplay, tempMin, tempMax, humidityAvg, levels:{key:value} }]
 
-// Pełna lista alergenów: pyłki roślin (Open-Meteo Air Quality) + alergeny zależne od pogody
+const LOCALES = { pl: "pl-PL", en: "en-GB", de: "de-DE", es: "es-ES", fr: "fr-FR", it: "it-IT" };
+
+const LANGUAGE_NAMES = { pl: "Polski", en: "English", de: "Deutsch", es: "Español", fr: "Français", it: "Italiano" };
+
 const ALLERGENS = [
-    { key: "alder_pollen",   label: "Olcha",   icon: "fa-tree",      type: "pollen" },
-    { key: "birch_pollen",   label: "Brzoza",  icon: "fa-tree",      type: "pollen" },
-    { key: "grass_pollen",   label: "Trawy",   icon: "fa-seedling",  type: "pollen" },
-    { key: "mugwort_pollen", label: "Bylica",  icon: "fa-leaf",      type: "pollen" },
-    { key: "olive_pollen",   label: "Oliwka",  icon: "fa-leaf",      type: "pollen" },
-    { key: "ragweed_pollen", label: "Ambrozja",icon: "fa-allergies", type: "pollen" },
-    { key: "dust_mites",     label: "Roztocza",icon: "fa-bed",       type: "weather" },
-    { key: "mold",           label: "Grzyby (pleśń)", icon: "fa-bacterium", type: "weather" }
+    { key: "alder_pollen",   icon: "fa-tree",      type: "pollen",
+      labels: { pl: "Olcha",   en: "Alder",      de: "Erle",      es: "Aliso",       fr: "Aulne",       it: "Ontano" } },
+    { key: "birch_pollen",   icon: "fa-tree",      type: "pollen",
+      labels: { pl: "Brzoza",  en: "Birch",      de: "Birke",     es: "Abedul",      fr: "Bouleau",     it: "Betulla" } },
+    { key: "grass_pollen",   icon: "fa-seedling",  type: "pollen",
+      labels: { pl: "Trawy",   en: "Grass",      de: "Gräser",    es: "Gramíneas",   fr: "Graminées",   it: "Graminacee" } },
+    { key: "mugwort_pollen", icon: "fa-leaf",      type: "pollen",
+      labels: { pl: "Bylica",  en: "Mugwort",    de: "Beifuß",    es: "Artemisa",    fr: "Armoise",     it: "Artemisia" } },
+    { key: "olive_pollen",   icon: "fa-leaf",      type: "pollen",
+      labels: { pl: "Oliwka",  en: "Olive",      de: "Olive",     es: "Olivo",       fr: "Olivier",     it: "Ulivo" } },
+    { key: "ragweed_pollen", icon: "fa-allergies", type: "pollen",
+      labels: { pl: "Ambrozja",en: "Ragweed",    de: "Ambrosia",  es: "Ambrosía",    fr: "Ambroisie",   it: "Ambrosia" } },
+    { key: "dust_mites",     icon: "fa-bed",       type: "weather",
+      labels: { pl: "Roztocza",en: "Dust mites", de: "Hausstaubmilben", es: "Ácaros del polvo", fr: "Acariens", it: "Acari della polvere" } },
+    { key: "mold",           icon: "fa-bacterium", type: "weather",
+      labels: { pl: "Grzyby (pleśń)", en: "Mold", de: "Schimmel", es: "Moho", fr: "Moisissures", it: "Muffe" } }
 ];
+
+const TRANSLATIONS = {
+    pl: {
+        subtitle: "Prognoza pyłków i alergenów",
+        locationNotSet: "Nie wybrano lokalizacji",
+        cityPlaceholder: "Wpisz nazwę miasta...",
+        panelTitle: "Moje alergeny",
+        forecastTitle: "Prognoza 3-dniowa",
+        viewSelected: "Wybrane",
+        viewAll: "Wszystkie",
+        noLocationForecast: "Wybierz lokalizację, aby zobaczyć prognozę.",
+        loading: "Pobieranie prognozy...",
+        errorFetch: "Nie udało się pobrać prognozy. Spróbuj ponownie później.",
+        noAllergensSelected: "Brak wybranych alergenów. Otwórz panel „Moje alergeny”, aby je wybrać.",
+        levelNone: "Brak", levelNoData: "Brak danych", levelLow: "Niskie", levelMedium: "Średnie", levelHigh: "Wysokie", levelVeryHigh: "Bardzo wysokie",
+        today: "Dziś", tomorrow: "Jutro", dayAfter: "Pojutrze",
+        dataSource: "Źródło danych: Open-Meteo (pyłki roślin i pogoda). Roztocza i grzyby są szacowane na podstawie wilgotności i temperatury.",
+        copyright: "© {year} Alergo. Wszelkie prawa zastrzeżone."
+    },
+    en: {
+        subtitle: "Pollen and allergen forecast",
+        locationNotSet: "No location selected",
+        cityPlaceholder: "Enter city name...",
+        panelTitle: "My allergens",
+        forecastTitle: "3-day forecast",
+        viewSelected: "Selected",
+        viewAll: "All",
+        noLocationForecast: "Choose a location to see the forecast.",
+        loading: "Loading forecast...",
+        errorFetch: "Couldn't load the forecast. Please try again later.",
+        noAllergensSelected: "No allergens selected. Open the \"My allergens\" panel to choose some.",
+        levelNone: "None", levelNoData: "No data", levelLow: "Low", levelMedium: "Medium", levelHigh: "High", levelVeryHigh: "Very high",
+        today: "Today", tomorrow: "Tomorrow", dayAfter: "Day after tomorrow",
+        dataSource: "Data source: Open-Meteo (plant pollen and weather). Dust mites and mold are estimated from humidity and temperature.",
+        copyright: "© {year} Alergo. All rights reserved."
+    },
+    de: {
+        subtitle: "Pollen- und Allergenvorhersage",
+        locationNotSet: "Kein Standort ausgewählt",
+        cityPlaceholder: "Stadt eingeben...",
+        panelTitle: "Meine Allergene",
+        forecastTitle: "3-Tages-Vorhersage",
+        viewSelected: "Ausgewählt",
+        viewAll: "Alle",
+        noLocationForecast: "Wähle einen Standort, um die Vorhersage zu sehen.",
+        loading: "Vorhersage wird geladen...",
+        errorFetch: "Die Vorhersage konnte nicht geladen werden. Bitte später erneut versuchen.",
+        noAllergensSelected: "Keine Allergene ausgewählt. Öffne das Panel „Meine Allergene“, um sie auszuwählen.",
+        levelNone: "Keine", levelNoData: "Keine Daten", levelLow: "Niedrig", levelMedium: "Mittel", levelHigh: "Hoch", levelVeryHigh: "Sehr hoch",
+        today: "Heute", tomorrow: "Morgen", dayAfter: "Übermorgen",
+        dataSource: "Datenquelle: Open-Meteo (Pflanzenpollen und Wetter). Hausstaubmilben und Schimmel werden anhand von Luftfeuchtigkeit und Temperatur geschätzt.",
+        copyright: "© {year} Alergo. Alle Rechte vorbehalten."
+    },
+    es: {
+        subtitle: "Pronóstico de polen y alérgenos",
+        locationNotSet: "Sin ubicación seleccionada",
+        cityPlaceholder: "Escribe el nombre de la ciudad...",
+        panelTitle: "Mis alérgenos",
+        forecastTitle: "Pronóstico de 3 días",
+        viewSelected: "Seleccionados",
+        viewAll: "Todos",
+        noLocationForecast: "Elige una ubicación para ver el pronóstico.",
+        loading: "Cargando pronóstico...",
+        errorFetch: "No se pudo cargar el pronóstico. Inténtalo de nuevo más tarde.",
+        noAllergensSelected: "No hay alérgenos seleccionados. Abre el panel \"Mis alérgenos\" para elegirlos.",
+        levelNone: "Ninguno", levelNoData: "Sin datos", levelLow: "Bajo", levelMedium: "Medio", levelHigh: "Alto", levelVeryHigh: "Muy alto",
+        today: "Hoy", tomorrow: "Mañana", dayAfter: "Pasado mañana",
+        dataSource: "Fuente de datos: Open-Meteo (polen de plantas y clima). Los ácaros y el moho se estiman a partir de la humedad y la temperatura.",
+        copyright: "© {year} Alergo. Todos los derechos reservados."
+    },
+    fr: {
+        subtitle: "Prévisions de pollen et d'allergènes",
+        locationNotSet: "Aucune localisation sélectionnée",
+        cityPlaceholder: "Saisissez le nom de la ville...",
+        panelTitle: "Mes allergènes",
+        forecastTitle: "Prévisions sur 3 jours",
+        viewSelected: "Sélectionnés",
+        viewAll: "Tous",
+        noLocationForecast: "Choisissez une localisation pour voir les prévisions.",
+        loading: "Chargement des prévisions...",
+        errorFetch: "Impossible de charger les prévisions. Veuillez réessayer plus tard.",
+        noAllergensSelected: "Aucun allergène sélectionné. Ouvrez le panneau « Mes allergènes » pour en choisir.",
+        levelNone: "Aucun", levelNoData: "Aucune donnée", levelLow: "Faible", levelMedium: "Moyen", levelHigh: "Élevé", levelVeryHigh: "Très élevé",
+        today: "Aujourd'hui", tomorrow: "Demain", dayAfter: "Après-demain",
+        dataSource: "Source des données : Open-Meteo (pollen des plantes et météo). Les acariens et les moisissures sont estimés à partir de l'humidité et de la température.",
+        copyright: "© {year} Alergo. Tous droits réservés."
+    },
+    it: {
+        subtitle: "Previsioni di pollini e allergeni",
+        locationNotSet: "Nessuna posizione selezionata",
+        cityPlaceholder: "Inserisci il nome della città...",
+        panelTitle: "I miei allergeni",
+        forecastTitle: "Previsioni a 3 giorni",
+        viewSelected: "Selezionati",
+        viewAll: "Tutti",
+        noLocationForecast: "Scegli una posizione per vedere le previsioni.",
+        loading: "Caricamento previsioni...",
+        errorFetch: "Impossibile caricare le previsioni. Riprova più tardi.",
+        noAllergensSelected: "Nessun allergene selezionato. Apri il pannello \"I miei allergeni\" per sceglierli.",
+        levelNone: "Nessuno", levelNoData: "Nessun dato", levelLow: "Basso", levelMedium: "Medio", levelHigh: "Alto", levelVeryHigh: "Molto alto",
+        today: "Oggi", tomorrow: "Domani", dayAfter: "Dopodomani",
+        dataSource: "Fonte dei dati: Open-Meteo (pollini delle piante e meteo). Acari della polvere e muffe sono stimati in base a umidità e temperatura.",
+        copyright: "© {year} Alergo. Tutti i diritti riservati."
+    }
+};
+
+function t(key) {
+    const lang = settings.language || "pl";
+    return (TRANSLATIONS[lang] && TRANSLATIONS[lang][key]) || TRANSLATIONS.pl[key] || key;
+}
+
+function allergenLabel(a) {
+    const lang = settings.language || "pl";
+    return a.labels[lang] || a.labels.pl;
+}
 
 // ----- Trwałość danych -----
 function loadData() {
@@ -59,7 +186,7 @@ function debounce(fn, delay) {
 async function searchCities(query) {
     if (!query || query.trim().length < 2) return [];
     try {
-        const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=6&language=pl&format=json`;
+        const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(query)}&count=6&language=${settings.language}&format=json`;
         const res = await fetch(url);
         const data = await res.json();
         return data.results || [];
@@ -107,7 +234,7 @@ async function selectCity(result) {
 // ----- GPS -----
 async function handleGPS() {
     if (!navigator.geolocation) {
-        alert("Twoja przeglądarka nie wspiera geolokalizacji.");
+        alert("Brak wsparcia geolokalizacji w tej przeglądarce.");
         return;
     }
     navigator.geolocation.getCurrentPosition(async (pos) => {
@@ -115,7 +242,7 @@ async function handleGPS() {
         try {
             const response = await fetch(`https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json`);
             const data = await response.json();
-            const city = (data.address && (data.address.city || data.address.town || data.address.village)) || "Twoja lokalizacja";
+            const city = (data.address && (data.address.city || data.address.town || data.address.village)) || "—";
 
             settings.location = { name: city, lat: latitude, lon: longitude };
             await saveData();
@@ -123,17 +250,15 @@ async function handleGPS() {
             await fetchForecast();
         } catch (e) {
             console.error(e);
-            alert("Nie udało się ustalić nazwy lokalizacji. Spróbuj ponownie.");
         }
     }, (err) => {
         console.error(err);
-        alert("Włącz uprawnienia do lokalizacji w ustawieniach telefonu.");
     });
 }
 
 function updateLocationUI() {
     const label = document.getElementById("location-label");
-    if (label) label.textContent = settings.location ? settings.location.name : "Nie wybrano lokalizacji";
+    if (label) label.textContent = settings.location ? settings.location.name : t("locationNotSet");
 }
 
 // ----- Ryzyko alergenów zależnych od pogody -----
@@ -165,10 +290,7 @@ function moldRisk(humidity, precipitation) {
 // ----- Pobieranie prognozy (pyłki + pogoda) -----
 async function fetchForecast() {
     if (!settings.location) return;
-    const resultsEl = document.getElementById("forecast-results");
-    if (resultsEl) {
-        resultsEl.innerHTML = `<p class="text-slate-500 text-sm"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Pobieranie prognozy...</p>`;
-    }
+    renderForecastSection(true);
 
     try {
         const { lat, lon } = settings.location;
@@ -185,9 +307,7 @@ async function fetchForecast() {
         renderForecastSection();
     } catch (e) {
         console.error(e);
-        if (resultsEl) {
-            resultsEl.innerHTML = `<p class="text-red-500 text-sm"><i class="fa-solid fa-triangle-exclamation mr-2"></i>Nie udało się pobrać prognozy. Spróbuj ponownie później.</p>`;
-        }
+        renderForecastSection(false, true);
     }
 }
 
@@ -205,11 +325,9 @@ function computeDailyForecast(pollenData, weatherData) {
     });
     const todayKeys = dateKeys.slice(0, 3);
 
-    const dayLabels = ["Dziś", "Jutro", "Pojutrze"];
-
     todayKeys.forEach((dateKey, i) => {
-        const idxList = times.reduce((acc, t, idx) => {
-            if (t.startsWith(dateKey)) acc.push(idx);
+        const idxList = times.reduce((acc, tm, idx) => {
+            if (tm.startsWith(dateKey)) acc.push(idx);
             return acc;
         }, []);
 
@@ -235,11 +353,28 @@ function computeDailyForecast(pollenData, weatherData) {
             }
         });
 
+        let tempMin = null, tempMax = null, humiditySum = 0, humidityCount = 0;
+        const tempArr = weatherHourly.temperature_2m;
+        const humArr = weatherHourly.relative_humidity_2m;
+        idxList.forEach(idx => {
+            if (tempArr && tempArr[idx] !== null && tempArr[idx] !== undefined) {
+                if (tempMin === null || tempArr[idx] < tempMin) tempMin = tempArr[idx];
+                if (tempMax === null || tempArr[idx] > tempMax) tempMax = tempArr[idx];
+            }
+            if (humArr && humArr[idx] !== null && humArr[idx] !== undefined) {
+                humiditySum += humArr[idx];
+                humidityCount++;
+            }
+        });
+
         const dateObj = new Date(dateKey + "T00:00:00");
         days.push({
             date: dateKey,
-            label: dayLabels[i] || dateObj.toLocaleDateString("pl-PL", { weekday: "long" }),
-            dateDisplay: dateObj.toLocaleDateString("pl-PL", { day: "numeric", month: "long" }),
+            dayIndex: i,
+            dateDisplay: dateObj.toLocaleDateString(LOCALES[settings.language] || "pl-PL", { day: "numeric", month: "long" }),
+            tempMin: tempMin !== null ? Math.round(tempMin) : null,
+            tempMax: tempMax !== null ? Math.round(tempMax) : null,
+            humidityAvg: humidityCount ? Math.round(humiditySum / humidityCount) : null,
             levels
         });
     });
@@ -247,13 +382,19 @@ function computeDailyForecast(pollenData, weatherData) {
     return days;
 }
 
+function dayLabel(dayIndex) {
+    if (dayIndex === 0) return t("today");
+    if (dayIndex === 1) return t("tomorrow");
+    return t("dayAfter");
+}
+
 function concentrationLevel(value) {
-    if (value === null || value === undefined) return { label: "Brak danych", color: "bg-slate-100 text-slate-400" };
-    if (value === 0) return { label: "Brak", color: "bg-slate-200 text-slate-600" };
-    if (value < 10) return { label: "Niskie", color: "bg-green-100 text-green-700" };
-    if (value < 30) return { label: "Średnie", color: "bg-yellow-100 text-yellow-700" };
-    if (value < 70) return { label: "Wysokie", color: "bg-orange-100 text-orange-700" };
-    return { label: "Bardzo wysokie", color: "bg-red-100 text-red-700" };
+    if (value === null || value === undefined) return { label: t("levelNoData"), color: "bg-slate-100 text-slate-400" };
+    if (value === 0) return { label: t("levelNone"), color: "bg-slate-200 text-slate-600" };
+    if (value < 10) return { label: t("levelLow"), color: "bg-green-100 text-green-700" };
+    if (value < 30) return { label: t("levelMedium"), color: "bg-yellow-100 text-yellow-700" };
+    if (value < 70) return { label: t("levelHigh"), color: "bg-orange-100 text-orange-700" };
+    return { label: t("levelVeryHigh"), color: "bg-red-100 text-red-700" };
 }
 
 function visibleAllergens() {
@@ -263,22 +404,30 @@ function visibleAllergens() {
     return ALLERGENS;
 }
 
-function renderForecastSection() {
+function renderForecastSection(loading, error) {
     const resultsEl = document.getElementById("forecast-results");
     if (!resultsEl) return;
 
     if (!settings.location) {
-        resultsEl.innerHTML = `<p class="text-slate-500 text-sm">Wybierz lokalizację, aby zobaczyć prognozę.</p>`;
+        resultsEl.innerHTML = `<p class="text-slate-500 text-sm">${t("noLocationForecast")}</p>`;
+        return;
+    }
+    if (loading) {
+        resultsEl.innerHTML = `<p class="text-slate-500 text-sm"><i class="fa-solid fa-spinner fa-spin mr-2"></i>${t("loading")}</p>`;
+        return;
+    }
+    if (error) {
+        resultsEl.innerHTML = `<p class="text-red-500 text-sm"><i class="fa-solid fa-triangle-exclamation mr-2"></i>${t("errorFetch")}</p>`;
         return;
     }
     if (!dailyForecast.length) {
-        resultsEl.innerHTML = `<p class="text-slate-500 text-sm"><i class="fa-solid fa-spinner fa-spin mr-2"></i>Pobieranie prognozy...</p>`;
+        resultsEl.innerHTML = `<p class="text-slate-500 text-sm"><i class="fa-solid fa-spinner fa-spin mr-2"></i>${t("loading")}</p>`;
         return;
     }
 
     const allergens = visibleAllergens();
     if (!allergens.length) {
-        resultsEl.innerHTML = `<p class="text-slate-500 text-sm">Brak wybranych alergenów. Otwórz panel "Moje alergeny", aby je wybrać.</p>`;
+        resultsEl.innerHTML = `<p class="text-slate-500 text-sm">${t("noAllergensSelected")}</p>`;
         return;
     }
 
@@ -287,19 +436,25 @@ function renderForecastSection() {
             const value = day.levels[a.key];
             const level = concentrationLevel(value);
             return `
-                <div class="flex flex-col items-center gap-1 w-16" title="${a.label}: ${level.label}">
+                <div class="flex flex-col items-center gap-1 w-16" title="${allergenLabel(a)}: ${level.label}">
                     <div class="w-11 h-11 rounded-full flex items-center justify-center ${level.color}">
                         <i class="fa-solid ${a.icon}"></i>
                     </div>
-                    <span class="text-[11px] text-slate-500 text-center leading-tight">${a.label}</span>
+                    <span class="text-[11px] text-slate-500 text-center leading-tight">${allergenLabel(a)}</span>
                 </div>
             `;
         }).join("");
 
+        const tempStr = (day.tempMin !== null && day.tempMax !== null) ? `${day.tempMin}°–${day.tempMax}°C` : "—";
+        const humStr = day.humidityAvg !== null ? `${day.humidityAvg}%` : "—";
+
         return `
             <div class="glass-card rounded-xl p-4 shadow-sm">
-                <p class="font-semibold text-sm mb-1">${day.label}</p>
-                <p class="text-xs text-slate-400 mb-3 capitalize">${day.dateDisplay}</p>
+                <p class="font-semibold text-sm mb-2">${dayLabel(day.dayIndex)} <span class="text-slate-400 font-normal">· ${day.dateDisplay}</span></p>
+                <div class="flex items-center gap-4 text-xs text-slate-500 mb-3">
+                    <span><i class="fa-solid fa-temperature-half text-blue-500 mr-1"></i>${tempStr}</span>
+                    <span><i class="fa-solid fa-droplet text-blue-500 mr-1"></i>${humStr}</span>
+                </div>
                 <div class="flex flex-wrap gap-3">${badges}</div>
             </div>
         `;
@@ -308,11 +463,12 @@ function renderForecastSection() {
     resultsEl.innerHTML = `
         <div class="space-y-3">${dayCards}</div>
         <div class="flex flex-wrap gap-2 mt-4 text-[11px]">
-            <span class="px-2 py-1 rounded-full bg-green-100 text-green-700">Niskie</span>
-            <span class="px-2 py-1 rounded-full bg-yellow-100 text-yellow-700">Średnie</span>
-            <span class="px-2 py-1 rounded-full bg-orange-100 text-orange-700">Wysokie</span>
-            <span class="px-2 py-1 rounded-full bg-red-100 text-red-700">Bardzo wysokie</span>
+            <span class="px-2 py-1 rounded-full bg-green-100 text-green-700">${t("levelLow")}</span>
+            <span class="px-2 py-1 rounded-full bg-yellow-100 text-yellow-700">${t("levelMedium")}</span>
+            <span class="px-2 py-1 rounded-full bg-orange-100 text-orange-700">${t("levelHigh")}</span>
+            <span class="px-2 py-1 rounded-full bg-red-100 text-red-700">${t("levelVeryHigh")}</span>
         </div>
+        <p class="text-[11px] text-slate-400 mt-4">${t("dataSource")}</p>
     `;
 }
 
@@ -325,7 +481,7 @@ function renderAllergenPanel() {
         return `
             <label class="flex items-center justify-between py-2 px-1 border-b border-slate-100 last:border-0 cursor-pointer">
                 <span class="flex items-center gap-2 text-sm">
-                    <i class="fa-solid ${a.icon} text-blue-600 w-5 text-center"></i>${a.label}
+                    <i class="fa-solid ${a.icon} text-blue-600 w-5 text-center"></i>${allergenLabel(a)}
                 </span>
                 <input type="checkbox" data-key="${a.key}" class="allergen-checkbox w-4 h-4 accent-blue-600" ${checked}>
             </label>
@@ -379,40 +535,54 @@ function applyViewToggleUI() {
     allBtn.className = `flex-1 text-sm font-medium px-3 py-1.5 rounded-lg transition ${settings.viewMode === "all" ? active : inactive}`;
 }
 
-// ----- Szkielet interfejsu (renderowany raz) -----
+async function setLanguage(lang) {
+    settings.language = lang;
+    await saveData();
+    renderShell();
+}
+
+function languageOptions() {
+    return Object.keys(LANGUAGE_NAMES).map(code =>
+        `<option value="${code}" ${settings.language === code ? "selected" : ""}>${LANGUAGE_NAMES[code]}</option>`
+    ).join("");
+}
+
+// ----- Szkielet interfejsu -----
 function renderShell() {
     const root = document.getElementById("app-root");
     if (!root) return;
 
     root.innerHTML = `
         <div class="min-h-screen flex flex-col">
-            <header class="bg-blue-600 text-white px-5 py-6 shadow-md">
-                <h1 class="text-xl font-bold"><i class="fa-solid fa-wind mr-2"></i>AlergoPrognoza</h1>
-                <p class="text-blue-100 text-sm mt-1">Prognoza pyłków i alergenów</p>
+            <header class="bg-blue-600 text-white px-5 py-4 shadow-md">
+                <div class="flex items-center justify-between mb-3">
+                    <h1 class="text-xl font-bold"><i class="fa-solid fa-wind mr-2"></i>Alergo</h1>
+                    <select id="lang-select" class="bg-blue-700 text-white text-xs rounded-lg px-2 py-1.5 border border-blue-400 focus:outline-none">
+                        ${languageOptions()}
+                    </select>
+                </div>
+                <p class="text-blue-100 text-xs mb-3">${t("subtitle")}</p>
+
+                <div class="flex items-center gap-2 mb-2">
+                    <i class="fa-solid fa-location-dot text-blue-200"></i>
+                    <span id="location-label" class="text-sm flex-1 truncate"></span>
+                    <button id="gps-btn" type="button" class="bg-blue-500 hover:bg-blue-400 text-white text-xs px-2.5 py-1.5 rounded-lg shrink-0">
+                        <i class="fa-solid fa-crosshairs"></i>
+                    </button>
+                </div>
+
+                <div class="relative">
+                    <input id="city-input" type="text" placeholder="${t("cityPlaceholder")}" autocomplete="off"
+                        class="w-full rounded-lg px-3 py-2 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300">
+                    <div id="city-suggestions" class="hide absolute z-10 left-0 right-0 bg-white border border-slate-200 rounded-lg shadow-lg mt-1 max-h-56 overflow-y-auto text-slate-800"></div>
+                </div>
             </header>
 
             <main class="flex-1 px-5 py-6 max-w-md w-full mx-auto">
 
-                <!-- Lokalizacja -->
-                <section class="glass-card rounded-xl p-4 mb-5 shadow-sm">
-                    <p class="text-xs text-slate-400 uppercase tracking-wide mb-2">Lokalizacja</p>
-                    <p class="font-semibold mb-3"><i class="fa-solid fa-location-dot text-blue-600 mr-1"></i><span id="location-label">Nie wybrano lokalizacji</span></p>
-
-                    <div class="relative mb-2">
-                        <input id="city-input" type="text" placeholder="Wpisz nazwę miasta..."
-                            class="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" autocomplete="off">
-                        <div id="city-suggestions" class="hide absolute z-10 left-0 right-0 bg-white border border-slate-200 rounded-lg shadow-lg mt-1 max-h-56 overflow-y-auto"></div>
-                    </div>
-
-                    <button id="gps-btn" class="w-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium px-4 py-2 rounded-lg transition">
-                        <i class="fa-solid fa-crosshairs mr-1"></i>Użyj mojej lokalizacji (GPS)
-                    </button>
-                </section>
-
-                <!-- Zwijany panel alergenów -->
                 <section class="glass-card rounded-xl mb-5 shadow-sm overflow-hidden">
                     <button id="panel-toggle" type="button" class="w-full flex items-center justify-between px-4 py-3">
-                        <span class="font-semibold text-sm"><i class="fa-solid fa-list-check text-blue-600 mr-2"></i>Moje alergeny</span>
+                        <span class="font-semibold text-sm"><i class="fa-solid fa-list-check text-blue-600 mr-2"></i>${t("panelTitle")}</span>
                         <i id="panel-chevron" class="fa-solid fa-chevron-down text-slate-400 transition-transform"></i>
                     </button>
                     <div id="allergen-panel-body" class="hide px-4 pb-4">
@@ -420,18 +590,21 @@ function renderShell() {
                     </div>
                 </section>
 
-                <!-- Prognoza -->
                 <section>
                     <div class="flex items-center justify-between mb-3">
-                        <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wide">Prognoza 3-dniowa</h2>
+                        <h2 class="text-sm font-semibold text-slate-500 uppercase tracking-wide">${t("forecastTitle")}</h2>
                     </div>
                     <div class="flex gap-2 mb-4">
-                        <button id="view-selected-btn" type="button">Wybrane</button>
-                        <button id="view-all-btn" type="button">Wszystkie</button>
+                        <button id="view-selected-btn" type="button">${t("viewSelected")}</button>
+                        <button id="view-all-btn" type="button">${t("viewAll")}</button>
                     </div>
                     <div id="forecast-results"></div>
                 </section>
             </main>
+
+            <footer class="text-center text-[11px] text-slate-400 py-4 px-5">
+                ${t("copyright").replace("{year}", new Date().getFullYear())}
+            </footer>
         </div>
     `;
 
@@ -487,7 +660,6 @@ function bindEvents() {
         const allBtn = e.target.closest("#view-all-btn");
         if (allBtn) { setViewMode("all"); return; }
 
-        // Kliknięcie poza polem wyszukiwania zamyka podpowiedzi
         if (!e.target.closest("#city-input") && !e.target.closest("#city-suggestions")) {
             const box = document.getElementById("city-suggestions");
             if (box) box.classList.add("hide");
@@ -496,7 +668,10 @@ function bindEvents() {
 
     root.addEventListener("change", (e) => {
         const checkbox = e.target.closest(".allergen-checkbox");
-        if (checkbox) toggleAllergenSelection(checkbox.dataset.key);
+        if (checkbox) { toggleAllergenSelection(checkbox.dataset.key); return; }
+
+        const langSelect = e.target.closest("#lang-select");
+        if (langSelect) setLanguage(langSelect.value);
     });
 }
 
