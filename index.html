@@ -6,21 +6,39 @@
     <title>Alergo</title>
     <link rel="manifest" href="manifest.json">
     <meta name="theme-color" content="#2563eb">
+    <!-- Tailwind CDN z obsługą trybu ciemnego (class-based) -->
+    <script>tailwind.config = { darkMode: 'class' }</script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700&display=swap');
+
         body { font-family: 'Inter', sans-serif; background-color: #f8fafc; }
+        .dark body { background-color: #0f172a; color: #e2e8f0; }
+
         .hide { display: none !important; }
-        .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); border: 1px solid rgba(255, 255, 255, 0.2); }
+
+        /* Karta — tryb jasny */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.97);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        /* Karta — tryb ciemny */
+        .dark .glass-card {
+            background: rgba(30, 41, 59, 0.97);
+            border-color: rgba(255, 255, 255, 0.06);
+            color: #e2e8f0;
+        }
+
+        /* Płynna zmiana koloru ikony chevron */
+        #panel-chevron { transition: transform 0.2s ease; }
     </style>
 </head>
 <body class="text-slate-800">
-    <!-- Aplikacja działa po załadowaniu skryptów wewnątrz -->
     <div id="app-root"></div>
-    
+
     <script>
-        // Rejestracja Service Workera dla PWA
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
                 navigator.serviceWorker.register('sw.js').catch(err => console.log('SW failed', err));
